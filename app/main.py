@@ -1,22 +1,23 @@
-import os
+# app/main.py
+import logging
 from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-from app.api import sessions, patients
 from app.db import init_db
+from app.api.upload_routes import router as upload_router
 
-app = FastAPI(title="MediNote API (FastAPI)")
+logger = logging.getLogger("uvicorn.error")
 
-# CORS for local testing
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+app = FastAPI(title="MediNote API")
 
-app.include_router(sessions.router, prefix="/v1", tags=["sessions"])
-app.include_router(patients.router, prefix="/v1", tags=["patients"])
+app.include_router(upload_router)
 
 @app.on_event("startup")
 def on_startup():
-    init_db()
+    try:
+        init_db()
+        logger.info("Database initialized successfully.")
+    except Exception as e:
+        logger.exception("Database initialization failed at startup. Continuing. Error: %s", e)
+
+@app.get("/")
+def root():
+    return {"status": "ok"}

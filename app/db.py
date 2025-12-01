@@ -2,23 +2,17 @@
 import os
 from sqlalchemy import create_engine, MetaData
 from sqlalchemy.orm import sessionmaker
-from app import models
 from dotenv import load_dotenv
+import logging
 
 load_dotenv()
+logger = logging.getLogger("uvicorn.error")
 
-# Prefer DATABASE_URL if provided (Railway, Heroku style)
 DATABASE_URL = os.getenv("DATABASE_URL")
 if not DATABASE_URL:
-    DB_USER = os.getenv("POSTGRES_USER", "medi")
-    DB_PASS = os.getenv("POSTGRES_PASSWORD", "medi_pwd")
-    DB_HOST = os.getenv("POSTGRES_HOST", "db")
-    DB_PORT = os.getenv("POSTGRES_PORT", "5432")
-    DB_NAME = os.getenv("POSTGRES_DB", "medi")
-    DATABASE_URL = f"postgresql://{DB_USER}:{DB_PASS}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+    # fallback to sqlite for debug/dev only
+    DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./medi.db")
 
-# If using SQLite fallback for local convenience, check for sqlite URL
-# (Set DATABASE_URL=sqlite:///./medi.db to use file DB)
 if DATABASE_URL.startswith("sqlite"):
     engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 else:
@@ -27,6 +21,18 @@ else:
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 metadata = MetaData()
 
-
 def init_db():
-    models.Base.metadata.create_all(bind=engine)
+    # Import models so they are registered with SQLAlchemy Base
+    try:
+        from app import models  # noqa: WPS433
+    except Exception:
+        logger.warning("No models module found or failed to import models.")
+    # Create tables (idempotent)
+    try:
+        if hasattr(models, "Base"):
+            models.Base.metadata.create_all(bind=engine)
+        else:
+            logger.warning("No Base in models; skipping create_all.")
+    except Exception as e:
+        logger.exception("Error creating DB tables: %s", e)
+        raise
