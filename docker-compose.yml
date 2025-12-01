@@ -1,0 +1,45 @@
+version: '3.8'
+services:
+  db:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: medi
+      POSTGRES_USER: medi
+      POSTGRES_PASSWORD: medi_pwd
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  minio:
+    image: minio/minio:latest
+    command: server /data
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    volumes:
+      - minio_data:/data
+    ports:
+      - "9000:9000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: .
+    env_file:
+      - .env
+    depends_on:
+      - db
+      - minio
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./:/usr/src/app
+
+volumes:
+  db_data:
+  minio_data:
