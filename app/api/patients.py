@@ -1,6 +1,7 @@
 # app/api/patients.py
 
 from typing import List
+import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
@@ -10,6 +11,7 @@ from app.deps import get_db, dev_auth
 
 # Main router for /v1/... endpoints
 router = APIRouter(prefix="/v1", tags=["patients"], dependencies=[Depends(dev_auth)])
+logger = logging.getLogger("uvicorn.error")
 
 # Separate router for the weird user endpoint from Postman: /users/asd3fd2faec
 user_router = APIRouter(tags=["users"], dependencies=[Depends(dev_auth)])
@@ -34,21 +36,24 @@ def list_patients(
     This matches the Postman behavior where `/v1/patients` is used
     to fetch a list, even though it's a POST.
     """
-    patients = (
-        db.query(models.Patient)
-        .filter(models.Patient.user_id == userId)
-        .order_by(models.Patient.id.desc())
-        .all()
-    )
-
-    return [
-        schemas.PatientOut(
-            id=p.id,
-            name=p.name,
-            userId=p.user_id,
+    try:
+        patients = (
+            db.query(models.Patient)
+            .filter(models.Patient.user_id == userId)
+            .order_by(models.Patient.id.desc())
+            .all()
         )
-        for p in patients
-    ]
+        return [
+            schemas.PatientOut(
+                id=p.id,
+                name=p.name,
+                userId=p.user_id,
+            )
+            for p in patients
+        ]
+    except Exception as e:
+        logger.exception("list_patients failed")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post(
@@ -70,19 +75,22 @@ def create_patient(
       "userId": "..."
     }
     """
-    patient = models.Patient(
-        name=body.name,
-        user_id=body.userId,
-    )
-    db.add(patient)
-    db.commit()
-    db.refresh(patient)
-
-    return schemas.PatientOut(
-        id=patient.id,
-        name=patient.name,
-        userId=patient.user_id,
-    )
+    try:
+        patient = models.Patient(
+            name=body.name,
+            user_id=body.userId,
+        )
+        db.add(patient)
+        db.commit()
+        db.refresh(patient)
+        return schemas.PatientOut(
+            id=patient.id,
+            name=patient.name,
+            userId=patient.user_id,
+        )
+    except Exception as e:
+        logger.exception("create_patient failed")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get(
@@ -93,19 +101,24 @@ def get_patient_details(
     patientId: int,
     db: Session = Depends(get_db),
 ):
-    patient = (
-        db.query(models.Patient)
-        .filter(models.Patient.id == patientId)
-        .first()
-    )
-    if not patient:
-        raise HTTPException(status_code=404, detail="Patient not found")
-
-    return {
-        "id": patient.id,
-        "name": patient.name,
-        "userId": patient.user_id,
-    }
+    try:
+        patient = (
+            db.query(models.Patient)
+            .filter(models.Patient.id == patientId)
+            .first()
+        )
+        if not patient:
+            raise HTTPException(status_code=404, detail="Patient not found")
+        return {
+            "id": patient.id,
+            "name": patient.name,
+            "userId": patient.user_id,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("get_patient_details failed")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get(
@@ -116,25 +129,28 @@ def get_sessions_by_patient(
     patientId: int,
     db: Session = Depends(get_db),
 ):
-    sessions = (
-        db.query(models.Session)
-        .filter(models.Session.patient_id == patientId)
-        .order_by(models.Session.start_time.desc())
-        .all()
-    )
-
-    return [
-        {
-            "id": s.id,
-            "patientId": s.patient_id,
-            "userId": s.user_id,
-            "patientName": s.patient_name,
-            "status": s.status,
-            "startTime": s.start_time,
-            "templateId": s.template_id,
-        }
-        for s in sessions
-    ]
+    try:
+        sessions = (
+            db.query(models.Session)
+            .filter(models.Session.patient_id == patientId)
+            .order_by(models.Session.start_time.desc())
+            .all()
+        )
+        return [
+            {
+                "id": s.id,
+                "patientId": s.patient_id,
+                "userId": s.user_id,
+                "patientName": s.patient_name,
+                "status": s.status,
+                "startTime": s.start_time,
+                "templateId": s.template_id,
+            }
+            for s in sessions
+        ]
+    except Exception as e:
+        logger.exception("get_sessions_by_patient failed")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get(
@@ -145,25 +161,28 @@ def get_all_sessions(
     userId: str = Query(..., description="External user id"),
     db: Session = Depends(get_db),
 ):
-    sessions = (
-        db.query(models.Session)
-        .filter(models.Session.user_id == userId)
-        .order_by(models.Session.start_time.desc())
-        .all()
-    )
-
-    return [
-        {
-            "id": s.id,
-            "patientId": s.patient_id,
-            "userId": s.user_id,
-            "patientName": s.patient_name,
-            "status": s.status,
-            "startTime": s.start_time,
-            "templateId": s.template_id,
-        }
-        for s in sessions
-    ]
+    try:
+        sessions = (
+            db.query(models.Session)
+            .filter(models.Session.user_id == userId)
+            .order_by(models.Session.start_time.desc())
+            .all()
+        )
+        return [
+            {
+                "id": s.id,
+                "patientId": s.patient_id,
+                "userId": s.user_id,
+                "patientName": s.patient_name,
+                "status": s.status,
+                "startTime": s.start_time,
+                "templateId": s.template_id,
+            }
+            for s in sessions
+        ]
+    except Exception as e:
+        logger.exception("get_all_sessions failed")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ---------------------------------------------------------------------------

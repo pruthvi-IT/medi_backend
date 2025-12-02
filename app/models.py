@@ -13,7 +13,6 @@ class User(Base):
 class Patient(Base):
     __tablename__ = "patients"
     id = Column(Integer, primary_key=True, index=True)
-    external_id = Column(String, index=True)  # optional mapping to client id
     user_id = Column(String, index=True, nullable=False)
     name = Column(String, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
