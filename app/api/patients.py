@@ -231,12 +231,7 @@ def fix_patients_schema(_auth=Depends(dev_auth)):
         if not created_exists:
             conn.execute(text("ALTER TABLE patients ADD COLUMN created_at TIMESTAMPTZ DEFAULT NOW()"))
 
-        if id_type and id_type not in ("integer", "bigint"):
-            conn.execute(text("CREATE SEQUENCE IF NOT EXISTS patients_id_seq"))
-            conn.execute(text("ALTER TABLE patients ALTER COLUMN id DROP NOT NULL"))
-            conn.execute(text("ALTER TABLE patients ALTER COLUMN id TYPE INTEGER USING CASE WHEN (id ~ '^[0-9]+$') THEN id::integer ELSE NULL END"))
-            conn.execute(text("UPDATE patients SET id = nextval('patients_id_seq') WHERE id IS NULL"))
-            conn.execute(text("ALTER TABLE patients ALTER COLUMN id SET NOT NULL"))
+        
 
         conn.execute(text("CREATE SEQUENCE IF NOT EXISTS patients_id_seq"))
         conn.execute(text("SELECT setval('patients_id_seq'::regclass, COALESCE((SELECT MAX(id) FROM patients), 0)::bigint)"))
