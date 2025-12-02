@@ -78,7 +78,21 @@ def create_patient(
     }
     """
     try:
+        next_id = None
+        try:
+            id_default = db.execute(text("SELECT column_default FROM information_schema.columns WHERE table_name='patients' AND column_name='id'")).scalar()
+        except Exception:
+            id_default = None
+        if not id_default:
+            try:
+                db.execute(text("CREATE SEQUENCE IF NOT EXISTS patients_id_seq"))
+                db.execute(text("SELECT setval('patients_id_seq'::regclass, COALESCE((SELECT MAX(id) FROM patients), 0)::bigint)"))
+                next_id = db.execute(text("SELECT nextval('patients_id_seq'::regclass)")).scalar()
+            except Exception:
+                next_id = None
+
         patient = models.Patient(
+            id=next_id,
             name=body.name,
             user_id=body.userId,
         )
