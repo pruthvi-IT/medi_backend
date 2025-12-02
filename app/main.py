@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.db import init_db
-from app.supabase_storage import ensure_bucket_exists
+from fastapi.staticfiles import StaticFiles
 
 # If these modules exist, keep these imports.
 # If you do NOT have templates.py, comment out that line + include_router line below.
@@ -36,7 +36,7 @@ def health():
 def on_startup():
     # Initialize DB (create tables if not present)
     init_db()
-    ensure_bucket_exists()
+    pass
 
 
 # Include routers – these define the /v1/... endpoints
@@ -44,4 +44,8 @@ app.include_router(patients_api.router)
 app.include_router(patients_api.user_router)
 app.include_router(templates_api.router)   
 app.include_router(recordings_api.router)
+
+# Serve local uploaded files under /static
+from app.config import FILE_STORAGE_DIR
+app.mount("/static", StaticFiles(directory=FILE_STORAGE_DIR), name="static")
 

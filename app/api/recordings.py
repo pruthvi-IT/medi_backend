@@ -9,7 +9,7 @@ import logging
 from app.deps import get_db, dev_auth
 from app import models, schemas
 from app.config import FILE_STORAGE_DIR
-from app.supabase_storage import get_public_url, upload_file_from_path
+from fastapi import Request
 
 logger = logging.getLogger("uvicorn.error")
 
@@ -64,7 +64,7 @@ def get_presigned_url(body: schemas.PresignRequest, request: Request):
     - publicUrl: public URL to access the final stored object
     """
     # Supabase object path inside bucket
-    object_key = f"sessions/{body.sessionId}/chunk_{body.chunkNumber}.wav"
+    object_key = f"{body.sessionId}/chunk_{body.chunkNumber}.wav"
 
     # backend upload URL: client will PUT the file here
     upload_url = str(
@@ -72,7 +72,7 @@ def get_presigned_url(body: schemas.PresignRequest, request: Request):
     )
 
     gcs_path = object_key
-    public_url = get_public_url(object_key)
+    public_url = f"/static/{object_key}"
 
     return schemas.PresignResponse(
         url=upload_url,
@@ -135,19 +135,14 @@ def notify_chunk_uploaded(body: schemas.NotifyChunkRequest, db: Session = Depend
         logger.error("Local chunk file not found at %s", local_path)
         raise HTTPException(status_code=400, detail="Local chunk file not found; upload may have failed")
 
-    # Upload to Supabase Storage using gcsPath as object key
-    try:
-        supabase_public_url = upload_file_from_path(local_path, body.gcsPath)
-    except Exception as e:
-        logger.exception("Failed to upload chunk to Supabase")
-        raise HTTPException(status_code=500, detail=f"Supabase upload failed: {e}")
+    public_url = f"/static/{body.sessionId}/chunk_{body.chunkNumber}.wav"
 
     # Persist metadata in DB
     chunk = models.AudioChunk(
         session_id=body.sessionId,
         chunk_number=body.chunkNumber,
         gcs_path=body.gcsPath,
-        public_url=supabase_public_url,
+        public_url=public_url,
         mime_type=body.mimeType,
         is_last=body.isLast,
         total_chunks_client=body.totalChunksClient,
@@ -155,4 +150,4 @@ def notify_chunk_uploaded(body: schemas.NotifyChunkRequest, db: Session = Depend
     db.add(chunk)
     db.commit()
 
-    return schemas.NotifyChunkResponse(success=True, downloadUrl=supabase_public_url)
+    return schemas.NotifyChunkResponse(success=True, downloadUrl=public_url)
