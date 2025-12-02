@@ -1,5 +1,5 @@
 # app/schemas.py
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from typing import Optional, List
 from datetime import datetime
 
@@ -14,17 +14,14 @@ class PatientOut(BaseModel):
     name: str
     userId: str
 
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)
 
 # Templates
 
 class TemplateOut(BaseModel):
     templateId: str
     name: str
-
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)
 
 # Recording / Sessions
 
@@ -45,9 +42,7 @@ class SessionOut(BaseModel):
     startTime: Optional[datetime] = None
     templateId: Optional[str] = None
 
-    class Config:
-        orm_mode = True
-
+    model_config = ConfigDict(from_attributes=True)
 class PresignRequest(BaseModel):
     sessionId: str
     chunkNumber: int
@@ -64,7 +59,6 @@ class NotifyChunkRequest(BaseModel):
     chunkNumber: int
     isLast: bool = False
     totalChunksClient: int = 0
-    publicUrl: str
     mimeType: str = "audio/wav"
     selectedTemplate: Optional[str] = None
     selectedTemplateId: Optional[str] = None
