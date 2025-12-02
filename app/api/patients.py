@@ -80,16 +80,14 @@ def create_patient(
     try:
         next_id = None
         try:
-            id_default = db.execute(text("SELECT column_default FROM information_schema.columns WHERE table_name='patients' AND column_name='id'")).scalar()
+            with engine.begin() as conn:
+                id_default = conn.execute(text("SELECT column_default FROM information_schema.columns WHERE table_name='patients' AND column_name='id'")).scalar()
+                if not id_default:
+                    conn.execute(text("CREATE SEQUENCE IF NOT EXISTS patients_id_seq"))
+                    conn.execute(text("SELECT setval('patients_id_seq'::regclass, COALESCE((SELECT MAX(id) FROM patients), 0)::bigint)"))
+                    next_id = conn.execute(text("SELECT nextval('patients_id_seq'::regclass)")).scalar()
         except Exception:
-            id_default = None
-        if not id_default:
-            try:
-                db.execute(text("CREATE SEQUENCE IF NOT EXISTS patients_id_seq"))
-                db.execute(text("SELECT setval('patients_id_seq'::regclass, COALESCE((SELECT MAX(id) FROM patients), 0)::bigint)"))
-                next_id = db.execute(text("SELECT nextval('patients_id_seq'::regclass)")).scalar()
-            except Exception:
-                next_id = None
+            next_id = None
 
         patient = models.Patient(
             id=next_id,
@@ -105,6 +103,10 @@ def create_patient(
             userId=patient.user_id,
         )
     except Exception as e:
+        try:
+            db.rollback()
+        except Exception:
+            pass
         logger.exception("create_patient failed")
         raise HTTPException(status_code=500, detail=str(e))
 
