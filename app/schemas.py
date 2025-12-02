@@ -1,43 +1,74 @@
+# app/schemas.py
 from pydantic import BaseModel
 from typing import Optional, List
+from datetime import datetime
 
-class CreateSessionReq(BaseModel):
-    patientId: str
+# Patients
+
+class PatientCreate(BaseModel):
+    name: str
+    userId: str
+
+class PatientOut(BaseModel):
+    id: int
+    name: str
+    userId: str
+
+    class Config:
+        orm_mode = True
+
+# Templates
+
+class TemplateOut(BaseModel):
+    templateId: str
+    name: str
+
+    class Config:
+        orm_mode = True
+
+# Recording / Sessions
+
+class SessionCreate(BaseModel):
+    patientId: int
     userId: str
     patientName: str
-    status: Optional[str] = "recording"
-    startTime: Optional[str] = None
+    status: str
+    startTime: datetime
     templateId: Optional[str] = None
 
-class CreateSessionResp(BaseModel):
+class SessionOut(BaseModel):
     id: str
+    patientId: int
+    userId: str
+    patientName: str
+    status: str
+    startTime: Optional[datetime] = None
+    templateId: Optional[str] = None
 
-class PresignedReq(BaseModel):
+    class Config:
+        orm_mode = True
+
+class PresignRequest(BaseModel):
     sessionId: str
     chunkNumber: int
-    mimeType: str
+    mimeType: str = "audio/wav"
 
-class PresignedResp(BaseModel):
+class PresignResponse(BaseModel):
     url: str
     gcsPath: str
-    publicUrl: Optional[str] = None
+    publicUrl: str
 
-class NotifyChunkReq(BaseModel):
+class NotifyChunkRequest(BaseModel):
     sessionId: str
     gcsPath: str
     chunkNumber: int
     isLast: bool = False
-    totalChunksClient: Optional[int] = 0
-    publicUrl: Optional[str] = None
-    mimeType: Optional[str] = None
+    totalChunksClient: int = 0
+    publicUrl: str
+    mimeType: str = "audio/wav"
     selectedTemplate: Optional[str] = None
     selectedTemplateId: Optional[str] = None
-    model: Optional[str] = None
+    model: Optional[str] = None  # "fast" / "accurate" from docs
 
-class PatientCreateReq(BaseModel):
-    name: str
-    userId: str
-
-class PatientResp(BaseModel):
-    id: str
-    name: str
+class NotifyChunkResponse(BaseModel):
+    success: bool

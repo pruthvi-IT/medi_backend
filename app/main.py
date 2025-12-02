@@ -1,23 +1,45 @@
 # app/main.py
-import logging
+
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
 from app.db import init_db
-from app.api.upload_routes import router as upload_router
 
-logger = logging.getLogger("uvicorn.error")
+# If these modules exist, keep these imports.
+# If you do NOT have templates.py, comment out that line + include_router line below.
+from app.api import patients as patients_api
+from app.api import recordings as recordings_api
+from app.api import templates as templates_api  # comment if you don't have this file
 
-app = FastAPI(title="MediNote API")
 
-app.include_router(upload_router)
+# THIS is what uvicorn is looking for: a top-level variable named "app"
+app = FastAPI(title="Medi Backend")
+
+
+# CORS – keep open for now
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+@app.get("/")
+def health():
+    return {"status": "ok"}
+
 
 @app.on_event("startup")
 def on_startup():
-    try:
-        init_db()
-        logger.info("Database initialized successfully.")
-    except Exception as e:
-        logger.exception("Database initialization failed at startup. Continuing. Error: %s", e)
+    # Initialize DB (create tables if not present)
+    init_db()
 
-@app.get("/")
-def root():
-    return {"status": "ok"}
+
+# Include routers – these define the /v1/... endpoints
+app.include_router(patients_api.router)
+app.include_router(patients_api.user_router)
+app.include_router(templates_api.router)   
+app.include_router(recordings_api.router)
+
