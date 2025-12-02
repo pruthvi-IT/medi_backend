@@ -155,4 +155,4 @@ def notify_chunk_uploaded(body: schemas.NotifyChunkRequest, db: Session = Depend
     db.add(chunk)
     db.commit()
 
-    return schemas.NotifyChunkResponse(success=True)
+    return schemas.NotifyChunkResponse(success=True, downloadUrl=supabase_public_url)

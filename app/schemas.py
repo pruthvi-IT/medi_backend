@@ -66,3 +66,4 @@ class NotifyChunkRequest(BaseModel):
 
 class NotifyChunkResponse(BaseModel):
     success: bool
+    downloadUrl: str | None = None
