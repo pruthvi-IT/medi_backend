@@ -1,6 +1,6 @@
 # app/api/patients.py
 
-from typing import List
+from typing import List, Dict
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -201,6 +201,29 @@ def get_all_sessions(
     except Exception as e:
         logger.exception("get_all_sessions failed")
         raise HTTPException(status_code=500, detail=str(e))
+    
+
+@router.delete(
+    "/patients/{patient_id}",
+    response_model=Dict[str, str],
+    summary="Delete a patient by ID",
+)
+def delete_patient(patient_id: int, db: Session = Depends(get_db)) -> Dict[str, str]:
+    """
+    Deletes a patient from the database by their unique ID.
+    """
+    patient = db.query(models.Patient).filter(models.Patient.id == patient_id).first()
+
+    if not patient:
+        raise HTTPException(status_code=404, detail="Patient not found")
+
+    db.delete(patient)
+    db.commit()
+
+    return {"message": "Patient deleted successfully"}
+
+   
+
 
 
  
