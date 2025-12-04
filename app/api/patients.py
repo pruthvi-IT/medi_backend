@@ -23,7 +23,7 @@ user_router = APIRouter(tags=["users"], dependencies=[Depends(dev_auth)])
 # PATIENT ENDPOINTS
 # ---------------------------------------------------------------------------
 
-@router.post(
+@router.get(
     "/patients",
     response_model=List[schemas.PatientOut],
     summary="List patients for a given userId",
