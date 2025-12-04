@@ -205,26 +205,34 @@ def get_all_sessions(
 class PatientIdBody(schemas.BaseModel):
     patientId: int
 
-@router.post(
-    "/delete-patient-ext",
+
+@router.delete(
+    "/patients/{patientId}",
     response_model=Dict[str, str],
-    summary="Delete a patient by ID (Postman compatible)",
+    summary="Delete a patient by ID",
 )
-def delete_patient(body: PatientIdBody, db: Session = Depends(get_db)) -> Dict[str, str]:
-    """
-    Deletes a patient from the database by their unique ID.
-    This endpoint uses POST with a body to be compatible with the provided
-    Postman collection.
-    """
-    patient = db.query(models.Patient).filter(models.Patient.id == body.patientId).first()
-
-    if not patient:
-        raise HTTPException(status_code=404, detail="Patient not found")
-
-    db.delete(patient)
-    db.commit()
-
-    return {"message": "Patient deleted successfully"}
+def delete_patient_by_id(patientId: int, db: Session = Depends(get_db)) -> Dict[str, str]:
+    try:
+        patient = (
+            db.query(models.Patient)
+            .filter(models.Patient.id == patientId)
+            .first()
+        )
+        if not patient:
+            raise HTTPException(status_code=404, detail="Patient not found")
+        db.query(models.Session).filter(models.Session.patient_id == patientId).delete(synchronize_session=False)
+        db.delete(patient)
+        db.commit()
+        return {"message": "Patient deleted successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        logger.exception("delete_patient_by_id failed")
+        raise HTTPException(status_code=500, detail=str(e))
 
    
 
