@@ -50,12 +50,11 @@ class PresignRequest(BaseModel):
 
 class PresignResponse(BaseModel):
     url: str
-    gcsPath: str
-    publicUrl: str
+    storagePath: str
 
 class NotifyChunkRequest(BaseModel):
     sessionId: str
-    gcsPath: str
+    storagePath: str
     chunkNumber: int
     isLast: bool = False
     totalChunksClient: int = 0

@@ -9,7 +9,6 @@ import logging
 from app.deps import get_db, dev_auth
 from app import models, schemas
 from app.config import FILE_STORAGE_DIR
-from fastapi import Request
 
 logger = logging.getLogger("uvicorn.error")
 
@@ -59,58 +58,79 @@ def create_session(body: schemas.SessionCreate, db: Session = Depends(get_db)):
 def get_presigned_url(body: schemas.PresignRequest, request: Request):
     """
     Returns:
-    - url: backend PUT endpoint for uploading the chunk (/v1/mock-upload/...)
-    - gcsPath: the "path" in storage for this chunk
-    - publicUrl: public URL to access the final stored object
+    - url: backend PUT endpoint for uploading the chunk (/v1/upload-chunk/...)
+    - storagePath: the path in Supabase Storage for this chunk
     """
     # Supabase object path inside bucket
-    object_key = f"{body.sessionId}/chunk_{body.chunkNumber}.wav"
+    storage_path = f"sessions/{body.sessionId}/chunk_{body.chunkNumber}.m4a"
 
     # backend upload URL: client will PUT the file here
     upload_url = str(
-        request.url_for("mock_upload_chunk", session_id=body.sessionId, chunk_number=body.chunkNumber)
+        request.url_for("upload_chunk", session_id=body.sessionId, chunk_number=body.chunkNumber)
     )
-
-    gcs_path = object_key
-    public_url = f"/static/{object_key}"
 
     return schemas.PresignResponse(
         url=upload_url,
-        gcsPath=gcs_path,
-        publicUrl=public_url,
+        storagePath=storage_path,
     )
 
 
 @router.put(
-    "/mock-upload/{session_id}/{chunk_number}",
-    name="mock_upload_chunk",
+    "/upload-chunk/{session_id}/{chunk_number}",
+    name="upload_chunk",
+    dependencies=[Depends(dev_auth)],
 )
-async def mock_upload_chunk(
+async def upload_chunk(
     session_id: str,
     chunk_number: int,
     file: UploadFile = File(...),
-    _auth=Depends(dev_auth),
 ) -> Any:
     """
-    Receives the audio chunk from the client and stores it locally.
-    Later, /v1/notify-chunk-uploaded will push it to Supabase.
+    Receives the audio chunk from the client and uploads it directly to Supabase Storage.
     """
-    session_dir = os.path.join(FILE_STORAGE_DIR, session_id)
-    os.makedirs(session_dir, exist_ok=True)
-    dest_path = os.path.join(session_dir, f"chunk_{chunk_number}.wav")
+    from app.supabase_storage import get_client, SUPABASE_BUCKET, ensure_bucket_exists
 
-    with open(dest_path, "wb") as f:
-        while True:
-            chunk = await file.read(1024 * 1024)
-            if not chunk:
-                break
-            f.write(chunk)
+    storage_path = f"sessions/{session_id}/chunk_{chunk_number}.m4a"
 
-    return {
-        "status": "uploaded",
-        "sessionId": session_id,
-        "chunkNumber": chunk_number,
-    }
+    try:
+        # Read file content
+        content = await file.read()
+
+        # Get Supabase client
+        client = get_client()
+
+        # Try to upload to Supabase Storage
+        try:
+            client.storage.from_(SUPABASE_BUCKET).upload(
+                storage_path,
+                content,
+                file_options={"content-type": file.content_type or "audio/m4a"},
+            )
+        except Exception as e:
+            # If bucket doesn't exist, create it and retry
+            if "Bucket not found" in str(e):
+                logger.warning("Bucket '%s' not found, creating...", SUPABASE_BUCKET)
+                ensure_bucket_exists()
+                client.storage.from_(SUPABASE_BUCKET).upload(
+                    storage_path,
+                    content,
+                    file_options={"content-type": file.content_type or "audio/m4a"},
+                )
+            else:
+                raise
+
+        logger.info("Uploaded chunk to Supabase: %s", storage_path)
+
+        return {
+            "status": "uploaded",
+            "sessionId": session_id,
+            "chunkNumber": chunk_number,
+            "storagePath": storage_path,
+        }
+
+    except Exception as e:
+        logger.error("Failed to upload chunk to Supabase: %s", str(e))
+        raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
 
 
 @router.post(
@@ -120,28 +140,19 @@ async def mock_upload_chunk(
 )
 def notify_chunk_uploaded(body: schemas.NotifyChunkRequest, db: Session = Depends(get_db)):
     """
-    After the client has uploaded the chunk to /mock-upload, they call this.
-    Here we:
-    - Upload the local file to Supabase Storage.
-    - Save chunk metadata in DB.
+    After the client has uploaded the chunk via /upload-chunk, they call this
+    to store the chunk metadata in the database.
     """
-    local_path = os.path.join(
-        FILE_STORAGE_DIR,
-        body.sessionId,
-        f"chunk_{body.chunkNumber}.wav",
-    )
+    from app.supabase_storage import get_public_url
 
-    if not os.path.exists(local_path):
-        logger.error("Local chunk file not found at %s", local_path)
-        raise HTTPException(status_code=400, detail="Local chunk file not found; upload may have failed")
+    # Generate public URL from storagePath
+    public_url = get_public_url(body.storagePath)
 
-    public_url = f"/static/{body.sessionId}/chunk_{body.chunkNumber}.wav"
-
-    # Persist metadata in DB
+    # Persist metadata in DB (using gcs_path column for storagePath)
     chunk = models.AudioChunk(
         session_id=body.sessionId,
         chunk_number=body.chunkNumber,
-        gcs_path=body.gcsPath,
+        gcs_path=body.storagePath,  # storing storagePath in gcs_path column
         public_url=public_url,
         mime_type=body.mimeType,
         is_last=body.isLast,
